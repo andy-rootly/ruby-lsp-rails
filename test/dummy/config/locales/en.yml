@@ -29,3 +29,6 @@
 
 en:
   hello: "Hello world"
+  app:
+    messages:
+      welcome: "Welcome to our app"

@@ -337,6 +337,11 @@ module RubyLsp
             result = resolve_i18n_key(params.fetch(:key))
             send_result(result)
           end
+        when "i18n_location"
+          with_request_error_handling(request) do
+            result = resolve_i18n_location(params.fetch(:key))
+            send_result(result)
+          end
         when "reload_i18n"
           with_progress("rails-reload-i18n", "Reloading Ruby LSP Rails I18n") do
             with_notification_error_handling(request) do
@@ -545,6 +550,70 @@ module RubyLsp
           result[locale] = I18n.t(key, locale: locale, default: "⚠️ translation missing")
         end
         result
+      end
+
+      #: (String) -> Hash[Symbol, String]?
+      def resolve_i18n_location(key)
+        # Default to English locale
+        locale = :en
+
+        # Check if the key exists for the locale
+        return nil unless I18n.exists?(key, locale)
+
+        # Try to find which file this key is loaded from
+        # I18n.load_path contains all the YAML files that have been loaded
+        key_parts = key.split(".")
+
+        I18n.load_path.each do |file_path|
+          next unless file_path.end_with?(".yml", ".yaml")
+
+          begin
+            # Use Psych to parse the YAML with source location information
+            yaml_content = File.read(file_path)
+            document = Psych.parse(yaml_content)
+            next unless document
+
+            # Navigate through the parse tree to find the key
+            line_number = find_key_in_yaml_tree(document, ["en"] + key_parts)
+            return { location: "#{file_path}:#{line_number}" } if line_number
+          rescue Psych::SyntaxError, Errno::ENOENT
+            # Skip files that can't be parsed or don't exist
+            next
+          end
+        end
+
+        nil
+      end
+
+      #: (Psych::Nodes::Node, Array[String]) -> Integer?
+      def find_key_in_yaml_tree(node, key_parts)
+        return nil if key_parts.empty?
+
+        case node
+        when Psych::Nodes::Document
+          # Recurse into the document's root
+          return find_key_in_yaml_tree(node.root, key_parts)
+        when Psych::Nodes::Mapping
+          # Iterate through key-value pairs
+          children = node.children
+          (0...children.length).step(2) do |i|
+            key_node = children[i]
+            value_node = children[i + 1]
+
+            # Check if this key matches what we're looking for
+            if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == key_parts.first
+              if key_parts.length == 1
+                # Found the final key, return its line number
+                return key_node.start_line + 1
+              else
+                # Continue searching in the value node
+                return find_key_in_yaml_tree(value_node, key_parts[1..])
+              end
+            end
+          end
+        end
+
+        nil
       end
     end
   end

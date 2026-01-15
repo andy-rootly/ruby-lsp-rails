@@ -49,6 +49,7 @@ module RubyLsp
       #: (Prism::StringNode node) -> void
       def on_string_node_enter(node)
         handle_possible_dsl(node)
+        handle_possible_i18n(node)
       end
 
       #: ((Prism::SymbolNode | Prism::StringNode) node) -> void
@@ -140,6 +141,31 @@ module RubyLsp
             range: range_from_location(target_method.location),
           )
         end
+      end
+
+      #: (Prism::StringNode node) -> void
+      def handle_possible_i18n(node)
+        call_node = @node_context.call_node
+        return unless call_node
+
+        receiver = call_node.receiver
+        return unless receiver.is_a?(Prism::ConstantReadNode)
+        return unless receiver.name == :I18n
+
+        message = call_node.message
+        return unless message == "t"
+
+        first_argument = call_node.arguments&.arguments&.first
+        return unless first_argument.is_a?(Prism::StringNode)
+        return unless first_argument == node
+
+        i18n_key = first_argument.unescaped
+        return if i18n_key.empty?
+
+        result = @client.i18n_location(i18n_key)
+        return unless result
+
+        @response_builder << Support::LocationBuilder.line_location_from_s(result.fetch(:location))
       end
     end
   end

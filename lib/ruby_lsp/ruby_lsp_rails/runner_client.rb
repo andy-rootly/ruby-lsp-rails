@@ -191,6 +191,17 @@ module RubyLsp
         nil
       end
 
+      #: (String key) -> Hash[Symbol, untyped]?
+      def i18n_location(key)
+        make_request("i18n_location", key: key)
+      rescue MessageError
+        log_message(
+          "Ruby LSP Rails failed to get i18n location",
+          type: RubyLsp::Constant::MessageType::ERROR,
+        )
+        nil
+      end
+
       # Delegates a notification to a server add-on
       #: (server_addon_name: String, request_name: String, **untyped params) -> void
       def delegate_notification(server_addon_name:, request_name:, **params)

@@ -284,6 +284,45 @@ module RubyLsp
         assert_equal(16, response.range.end.character)
       end
 
+      test "provides the definition of an i18n translation" do
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 9 })
+          I18n.t("hello")
+        RUBY
+
+        assert_equal(1, response.size)
+        dummy_root = File.expand_path("../dummy", __dir__)
+
+        # The response should point to the English locale file
+        assert_match(%r{config/locales/en\.yml}, response[0].uri)
+
+        # Verify it's the correct line (line 31 in en.yml where "hello:" is defined)
+        assert_equal(30, response[0].range.start.line)
+        assert_equal(30, response[0].range.end.line)
+      end
+
+      test "handles missing i18n translation keys" do
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 9 })
+          I18n.t("nonexistent_key")
+        RUBY
+
+        assert_empty(response)
+      end
+
+      test "provides the definition of a nested i18n translation key" do
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 9 })
+          I18n.t("app.messages.welcome")
+        RUBY
+
+        assert_equal(1, response.size)
+
+        # The response should point to the English locale file
+        assert_match(%r{config/locales/en\.yml}, response[0].uri)
+
+        # Verify it points to the "welcome" key line
+        assert_equal(33, response[0].range.start.line)
+        assert_equal(33, response[0].range.end.line)
+      end
+
       private
 
       def generate_definitions_for_source(source, position)
