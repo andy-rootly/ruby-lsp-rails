@@ -338,6 +338,11 @@ module RubyLsp
             result = resolve_i18n_key(params.fetch(:key))
             send_result(result)
           end
+        when "i18n_location"
+          with_request_error_handling(request) do
+            result = resolve_i18n_location(params.fetch(:key))
+            send_result(result)
+          end
         when "reload_i18n"
           with_progress("rails-reload-i18n", "Reloading Ruby LSP Rails I18n") do
             with_notification_error_handling(request) do
@@ -555,6 +560,52 @@ module RubyLsp
         I18n.available_locales.each_with_object({}) do |locale, result|
           result[locale] = I18n.t(key, locale: locale, default: "⚠️ translation missing")
         end
+      end
+
+      #: (String) -> Hash[Symbol, untyped]?
+      def resolve_i18n_location(key)
+        locale = I18n.default_locale
+        locale_file = I18n.load_path.find do |path|
+          path.start_with?(::Rails.root.to_s) && File.basename(path, ".*") == locale.to_s
+        end
+        return unless locale_file
+
+        key_parts = [locale.to_s] + key.split(".")
+        line = find_key_in_yaml_ast(locale_file, key_parts)
+        return unless line
+
+        { location: "#{locale_file}:#{line}" }
+      end
+
+      #: (String, Array[String]) -> Integer?
+      def find_key_in_yaml_ast(file_path, key_parts)
+        ast = Psych.parse_file(file_path)
+        return unless ast
+
+        find_key_in_node(ast.root, key_parts, 0)
+      end
+
+      #: (Psych::Nodes::Node?, Array[String], Integer) -> Integer?
+      def find_key_in_node(node, key_parts, depth)
+        return unless node.is_a?(Psych::Nodes::Mapping)
+
+        target_key = key_parts[depth]
+        return unless target_key
+
+        node.children.each_slice(2) do |key_node, value_node|
+          next unless key_node.is_a?(Psych::Nodes::Scalar)
+          next unless key_node.value == target_key
+
+          if depth == key_parts.length - 1
+            # Found the final key, return its line (1-indexed)
+            return key_node.start_line + 1
+          else
+            # Need to go deeper
+            return find_key_in_node(value_node, key_parts, depth + 1)
+          end
+        end
+
+        nil
       end
     end
   end

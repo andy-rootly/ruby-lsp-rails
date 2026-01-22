@@ -87,6 +87,17 @@ module RubyLsp
         assert_equal("⚠️ translation missing", translations[:fr])
       end
 
+      test "#i18n_location returns the location of an i18n key" do
+        result = @client.i18n_location("hello") #: as !nil
+        assert_instance_of(Hash, result)
+        assert_match(%r{config/locales/en\.yml:\d+$}, result[:location])
+      end
+
+      test "#i18n_location returns nil for a missing key" do
+        result = @client.i18n_location("missing_key")
+        assert_nil(result)
+      end
+
       test "returns nil if the request returns a nil response" do
         assert_nil @client.model("ApplicationRecord") # ApplicationRecord is abstract
       end

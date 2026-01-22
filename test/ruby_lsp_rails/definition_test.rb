@@ -467,6 +467,50 @@ module RubyLsp
         assert_equal(15, response.range.end.character)
       end
 
+      test "provides the definition of an I18n key" do
+        expected_response = { location: "#{dummy_root}/config/locales/en.yml:31" }
+        RunnerClient.any_instance.stubs(i18n_location: expected_response)
+
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 9 })
+          I18n.t("hello")
+        RUBY
+
+        assert_equal(1, response.size)
+        assert_equal(
+          URI::Generic.from_path(path: File.join(dummy_root, "config", "locales", "en.yml")).to_s,
+          response[0].uri,
+        )
+        assert_equal(30, response[0].range.start.line)
+        assert_equal(30, response[0].range.end.line)
+      end
+
+      test "provides the definition of an I18n key with translate method" do
+        expected_response = { location: "#{dummy_root}/config/locales/en.yml:31" }
+        RunnerClient.any_instance.stubs(i18n_location: expected_response)
+
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 16 })
+          I18n.translate("hello")
+        RUBY
+
+        assert_equal(1, response.size)
+        assert_equal(
+          URI::Generic.from_path(path: File.join(dummy_root, "config", "locales", "en.yml")).to_s,
+          response[0].uri,
+        )
+        assert_equal(30, response[0].range.start.line)
+        assert_equal(30, response[0].range.end.line)
+      end
+
+      test "returns empty when I18n key location is not found" do
+        RunnerClient.any_instance.stubs(i18n_location: nil)
+
+        response = generate_definitions_for_source(<<~RUBY, { line: 0, character: 9 })
+          I18n.t("nonexistent")
+        RUBY
+
+        assert_empty(response)
+      end
+
       private
 
       def generate_definitions_for_source(source, position)

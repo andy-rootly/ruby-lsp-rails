@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 class UsersController < ApplicationController
-  def index; end
+  def index
+    @greeting = I18n.t("hello")
+  end
 
   def archive; end
 end
